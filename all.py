@@ -49,7 +49,8 @@ def collect_data(resource_iterator, fields_weight: dict, filter_weight):
   data = []
   for resource in resource_iterator:
     # print all attributes for resource
-    print(dir(resource))
+    # if __debug_mode():
+    #   print(dir(resource))
     item = OrderedDict()
     for field in fields_weight.keys():
       if isinstance(field, types.FunctionType):
@@ -195,6 +196,7 @@ def list_secrets():
     print(secrets)
   return secrets
 
+
 @cli.command()
 @click.pass_context
 def secret(ctx):
@@ -228,6 +230,7 @@ def list_rdss():
     next_token = response['Marker']
   return rdss
 
+
 @cli.command()
 @click.pass_context
 def rds(ctx):
@@ -244,6 +247,63 @@ def rds(ctx):
           'DBParameterGroups': ("ParameterGroups", 6),
       }),
       list_rdss()
+  )
+
+
+def list_dnss():
+  client = boto3.client('route53')
+  dnss = []
+  hosted_zones = client.list_hosted_zones(MaxItems='100')['HostedZones'] # save pagination. should't be that many
+  if __debug_mode():
+    print(hosted_zones)
+
+  for zone in hosted_zones:
+    response = client.list_resource_record_sets(HostedZoneId=zone['Id'])
+    if __debug_mode():
+      print(response)
+    for recordSet in response['ResourceRecordSets']:
+      print(recordSet, '--------')
+      if recordSet['Type'] == 'A':
+        dnss.append({
+            'Name': recordSet['Name'],
+            'Type': recordSet['Type'],
+            'Target': recordSet.get("AliasTarget",{}).get('DNSName', 'N/A'),
+            'HostedZoneId': zone['Id'],
+            'HostedZoneName': zone['Name'],
+            'Private': zone.get('Config', {}).get('PrivateZone', False),
+        })
+      elif recordSet['Type'] == 'CNAME':
+        dnss.append({
+            'Name': recordSet['Name'],
+            'Type': recordSet['Type'],
+            'Target': ','.join([x.get('Value') for x in recordSet.get('ResourceRecords', [])]),
+            'TTL': recordSet['TTL'],
+            'HostedZoneId': zone['Id'],
+            'HostedZoneName': zone['Name'],
+            'Private': zone.get('Config', {}).get('PrivateZone', False),
+        })
+      # ignore rest
+
+  if __debug_mode():
+    print(dnss)
+  return dnss
+
+
+@cli.command()
+@click.pass_context
+def dns(ctx):
+  __process(
+      ctx,
+      OrderedDict({
+          'Name': ("Name", 8),
+          'Type': ("Type", 8),
+          'Target': ("Target", 8),
+          'TTL': ("TTL", 8),
+          'HostedZoneId': ("HostedZoneId", 5),
+          'HostedZoneName': ("HostedZoneName", 5),
+          'Private': ("Private", 5),
+      }),
+      list_dnss()
   )
 
 
