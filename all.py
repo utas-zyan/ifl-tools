@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-# Create a pycli command to short cut the awscli through boto3 interface. this script has the following commands
-# ec2, which shows all the ec2 instances and their public/private ip addresses and status.
 
 import boto3
+import sys
 import os
 import click
 import json
@@ -11,8 +10,9 @@ from collections import OrderedDict
 from prettytable import PrettyTable
 
 
-def __debug_mode():
-  return os.environ.get("DEBUG") and os.environ["DEBUG"].lower() != "false"
+def debug_print(*args, **kwargs):
+  if os.environ.get("DEBUG") and os.environ["DEBUG"].lower() != "false":
+    print(*args, file=sys.stderr, **kwargs)
 
 
 @click.group()
@@ -66,7 +66,7 @@ def collect_data(resource_iterator, fields_weight: dict, filter_weight):
           else:
             cur_item = getattr(cur_item, key, 'N/A')
         item[fields_weight[field][0]] = cur_item
-    print(item)
+    debug_print(item)
     data.append(item)
   return data
 
@@ -121,8 +121,7 @@ def list_kms_keys():
   key_aliase_arns = {}
   aliases = kms.list_aliases()
   for alias in aliases['Aliases']:
-    if __debug_mode():
-      print(alias)
+    debug_print(alias)
     if 'TargetKeyId' not in alias:
       continue # must be amazon managed key, forget it
     key_aliases[alias['TargetKeyId']] = alias['AliasName']
@@ -135,8 +134,7 @@ def list_kms_keys():
       response = kms.list_keys(Limit=100, Marker=next_marker)
     else:
       response = kms.list_keys(Limit=100)
-    if __debug_mode():
-      print(response)
+    debug_print(response)
     keys.extend(response['Keys'])
     if not response['Truncated']:
       break
@@ -156,8 +154,7 @@ def list_kms_keys():
         "Alias": key_aliases.get(key_info['KeyId'], "N/A"),
         "AliasArn": key_aliase_arns.get(key_info['KeyId'], "N/A"),
     })
-  if __debug_mode():
-    print(key_details)
+  debug_print(key_details)
   return key_details
 
 
@@ -186,14 +183,12 @@ def list_secrets():
       response = client.list_secrets(MaxResults=100, NextToken=next_token)
     else:
       response = client.list_secrets(MaxResults=100)
-    if __debug_mode():
-      print(response)
+    debug_print(response)
     secrets.extend(response['SecretList'])
     if 'NextToken' not in response:
       break
     next_token = response['NextToken']
-  if __debug_mode:
-    print(secrets)
+  debug_print(secrets)
   return secrets
 
 
@@ -222,8 +217,7 @@ def list_rdss():
       response = client.describe_db_instances(MaxRecords=100, Marker=next_token)
     else:
       response = client.describe_db_instances(MaxRecords=100)
-    if __debug_mode():
-      print(response)
+    debug_print(response)
     rdss.extend(response['DBInstances'])
     if 'Marker' not in response:
       break
@@ -254,20 +248,18 @@ def list_dnss():
   client = boto3.client('route53')
   dnss = []
   hosted_zones = client.list_hosted_zones(MaxItems='100')['HostedZones'] # save pagination. should't be that many
-  if __debug_mode():
-    print(hosted_zones)
+  debug_print(hosted_zones)
 
   for zone in hosted_zones:
     response = client.list_resource_record_sets(HostedZoneId=zone['Id'])
-    if __debug_mode():
-      print(response)
+    debug_print(response)
     for recordSet in response['ResourceRecordSets']:
       print(recordSet, '--------')
       if recordSet['Type'] == 'A':
         dnss.append({
             'Name': recordSet['Name'],
             'Type': recordSet['Type'],
-            'Target': recordSet.get("AliasTarget",{}).get('DNSName', 'N/A'),
+            'Target': recordSet.get("AliasTarget", {}).get('DNSName', 'N/A'),
             'HostedZoneId': zone['Id'],
             'HostedZoneName': zone['Name'],
             'Private': zone.get('Config', {}).get('PrivateZone', False),
@@ -284,8 +276,7 @@ def list_dnss():
         })
       # ignore rest
 
-  if __debug_mode():
-    print(dnss)
+  debug_print(dnss)
   return dnss
 
 
