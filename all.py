@@ -8,11 +8,11 @@ import json
 import types
 from collections import OrderedDict
 from prettytable import PrettyTable
+from pprint import pprint
 
-
-def debug_print(*args, **kwargs):
+def dprint(*args, **kwargs):
   if os.environ.get("DEBUG") and os.environ["DEBUG"].lower() != "false":
-    print(*args, file=sys.stderr, **kwargs)
+    pprint(*args, stream=sys.stderr, **kwargs)
 
 
 @click.group()
@@ -36,8 +36,12 @@ def print_in_table(data: list[OrderedDict]):
         ])
 
   # Adjust the table width based on the terminal size
-  terminal_width, _ = os.get_terminal_size()
-  table.max_width = terminal_width - 10
+  try:
+    terminal_width, _ = os.get_terminal_size()
+    table.max_width = terminal_width - 10
+  except Exception as e:
+    pass # terminal size not available due to some reason, could be under pipe
+  table.align = "l"
   print(table)
 
 
@@ -66,7 +70,7 @@ def collect_data(resource_iterator, fields_weight: dict, filter_weight):
           else:
             cur_item = getattr(cur_item, key, 'N/A')
         item[fields_weight[field][0]] = cur_item
-    debug_print(item)
+    dprint(item)
     data.append(item)
   return data
 
@@ -121,7 +125,7 @@ def list_kms_keys():
   key_aliase_arns = {}
   aliases = kms.list_aliases()
   for alias in aliases['Aliases']:
-    debug_print(alias)
+    dprint(alias)
     if 'TargetKeyId' not in alias:
       continue # must be amazon managed key, forget it
     key_aliases[alias['TargetKeyId']] = alias['AliasName']
@@ -134,7 +138,7 @@ def list_kms_keys():
       response = kms.list_keys(Limit=100, Marker=next_marker)
     else:
       response = kms.list_keys(Limit=100)
-    debug_print(response)
+    dprint(response)
     keys.extend(response['Keys'])
     if not response['Truncated']:
       break
@@ -154,7 +158,7 @@ def list_kms_keys():
         "Alias": key_aliases.get(key_info['KeyId'], "N/A"),
         "AliasArn": key_aliase_arns.get(key_info['KeyId'], "N/A"),
     })
-  debug_print(key_details)
+  dprint(key_details)
   return key_details
 
 
@@ -183,12 +187,12 @@ def list_secrets():
       response = client.list_secrets(MaxResults=100, NextToken=next_token)
     else:
       response = client.list_secrets(MaxResults=100)
-    debug_print(response)
+    dprint(response)
     secrets.extend(response['SecretList'])
     if 'NextToken' not in response:
       break
     next_token = response['NextToken']
-  debug_print(secrets)
+  dprint(secrets)
   return secrets
 
 
@@ -217,7 +221,7 @@ def list_rdss():
       response = client.describe_db_instances(MaxRecords=100, Marker=next_token)
     else:
       response = client.describe_db_instances(MaxRecords=100)
-    debug_print(response)
+    dprint(response)
     rdss.extend(response['DBInstances'])
     if 'Marker' not in response:
       break
@@ -248,11 +252,11 @@ def list_dnss():
   client = boto3.client('route53')
   dnss = []
   hosted_zones = client.list_hosted_zones(MaxItems='100')['HostedZones'] # save pagination. should't be that many
-  debug_print(hosted_zones)
+  dprint(hosted_zones)
 
   for zone in hosted_zones:
     response = client.list_resource_record_sets(HostedZoneId=zone['Id'])
-    debug_print(response)
+    dprint(response)
     for recordSet in response['ResourceRecordSets']:
       print(recordSet, '--------')
       if recordSet['Type'] == 'A':
@@ -276,7 +280,7 @@ def list_dnss():
         })
       # ignore rest
 
-  debug_print(dnss)
+  dprint(dnss)
   return dnss
 
 
@@ -295,6 +299,80 @@ def dns(ctx):
           'Private': ("Private", 5),
       }),
       list_dnss()
+  )
+
+def list_albs():
+  # find all ALBs
+  client = boto3.client('elbv2')
+  albs = []
+  next_marker = None
+  while True:
+    if next_marker:
+      response = client.describe_load_balancers(Marker=next_marker)
+    else:
+      response = client.describe_load_balancers()
+    dprint(response)
+    albs.extend(response['LoadBalancers'])
+    if 'NextMarker' not in response:
+      break
+    next_marker = response['NextMarker']
+  listeners=[]
+  for alb in albs:
+    response = client.describe_listeners(LoadBalancerArn=alb['LoadBalancerArn'])
+    for listener in (response['Listeners']):
+      listeners.append({
+          'ListenerArn': listener['ListenerArn'],
+          'LoadBalancerArn': listener['LoadBalancerArn'],
+          'DNSName': alb.get('DNSName', 'N/A'),
+          'Private': alb.get('Scheme', 'N/A') == 'internal'
+      })
+  dprint(listeners)
+  return listeners
+
+
+@cli.command()
+@click.pass_context
+def alb(ctx):
+  __process(
+      ctx,
+      OrderedDict({
+          'ListenerArn': ("ListenerArn", 9),
+          'LoadBalancerArn': ("LoadBalancerArn", 9),
+          'DNSName': ("DNSName", 8),
+          'Private': ("Private", 8),
+      }),
+      list_albs()
+  )
+
+
+def list_roles():
+  # find all roles
+  client = boto3.client('iam')
+  roles = []
+  next_marker = None
+  while True:
+    if next_marker:
+      response = client.list_roles(Marker=next_marker)
+    else:
+      response = client.list_roles()
+    dprint(response)
+    roles.extend(response['Roles'])
+    if 'Marker' not in response:
+      break
+    next_marker = response['Marker']
+
+  return roles
+
+
+@cli.command()
+@click.pass_context
+def role(ctx):
+  __process(
+      ctx,
+      OrderedDict({
+          'Arn': ("RoleArn", 9),
+      }),
+      list_roles()
   )
 
 
