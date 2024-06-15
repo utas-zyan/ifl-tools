@@ -47,7 +47,7 @@ def print_in_table(data: list[OrderedDict]):
 
 
 def print_json(data: OrderedDict):
-  print(json.dumps(data, indent=2))
+  print(json.dumps(data, indent=2, default=str))
 
 
 def collect_data(resource_iterator, fields_weight: dict, filter_weight):
@@ -99,7 +99,7 @@ def find_tag(resource, tag_key):
   for tag in tags:
     if tag['Key'] == tag_key:
       return tag['Value']
-    
+
   return 'N/A'
 
 
@@ -186,7 +186,7 @@ def kms(ctx):
   )
 
 
-def list_secrets():
+def list_secrets(with_value=False):
   client = boto3.client('secretsmanager')
   secrets = []
   next_token = None
@@ -201,6 +201,9 @@ def list_secrets():
       break
     next_token = response['NextToken']
   dprint(secrets)
+  if with_value:
+    for secret in secrets:
+      secret['SecretValue'] = client.get_secret_value(SecretId=secret['ARN'])['SecretString']
   return secrets
 
 
@@ -215,8 +218,10 @@ def secret(ctx):
           'LastChangedDate': ("LastChangedDate", 7),
           'LastAccessedDate': ("LastAccessedDate", 8),
           'Description': ("Description", 8),
+          'SecretValue': ("SecretValue", 2),
+
       }),
-      list_secrets()
+      list_secrets(with_value=ctx.obj['WEIGHT']<=2)
   )
 
 
@@ -453,7 +458,7 @@ def list_amis():
     if 'NextToken' not in response:
       break
     next_token = response['NextToken']
-    
+
   return amis
 
 
@@ -473,5 +478,41 @@ def ami(ctx):
       list_amis()
   )
 
+
+def list_params(with_value=False):
+  client = boto3.client('ssm')
+  params = []
+
+  next_token = None
+  while True:
+    # fetch all images
+    if next_token:
+      response = client.describe_parameters(MaxResults=50, NextToken=next_token)
+    else:
+      response = client.describe_parameters(MaxResults=50)
+    dprint(response)
+    params.extend(response['Parameters'])
+    if 'NextToken' not in response:
+      break
+    next_token = response['NextToken']
+  if with_value:
+    for param in params:
+      param['Value'] = client.get_parameter(Name=param['Name'], WithDecryption=False)['Parameter']['Value']
+  return params
+
+
+@cli.command()
+@click.pass_context
+def param(ctx):
+  __process(
+      ctx,
+      OrderedDict({
+          'Name': ("Name", 9),
+          'Description': ("Description", 8),
+          'ARN': ("ARN", 6),
+          'Value': ("Value", 2),
+      }),
+      list_params(with_value=ctx.obj['WEIGHT']<=2)
+  )
 if __name__ == '__main__':
   cli()
