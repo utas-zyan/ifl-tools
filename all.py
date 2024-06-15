@@ -10,6 +10,7 @@ from collections import OrderedDict
 from prettytable import PrettyTable
 from pprint import pprint
 
+
 def dprint(*args, **kwargs):
   if os.environ.get("DEBUG") and os.environ["DEBUG"].lower() != "false":
     pprint(*args, stream=sys.stderr, **kwargs)
@@ -53,8 +54,10 @@ def collect_data(resource_iterator, fields_weight: dict, filter_weight):
   data = []
   for resource in resource_iterator:
     # print all attributes for resource
-    # if __debug_mode():
-    #   print(dir(resource))
+    if isinstance(resource, dict):
+      dprint(resource)
+    else:
+      dprint(dir(resource))
     item = OrderedDict()
     for field in fields_weight.keys():
       if isinstance(field, types.FunctionType):
@@ -89,9 +92,14 @@ def __process(ctx, fields_weights: dict, resource_iterator):
 
 
 def find_tag(resource, tag_key):
-  for tag in resource.tags or []:
+  if isinstance(resource, dict):
+    tags = resource.get('Tags', [])
+  else:
+    tags = resource.tags or []
+  for tag in tags:
     if tag['Key'] == tag_key:
       return tag['Value']
+    
   return 'N/A'
 
 
@@ -113,7 +121,7 @@ def ec2(ctx):
           'launch_time': ("Time", 2),
           'tags': ("Tags", 6),
           'key_name': ("Key Name", 7),
-
+          'iam_instance_profile.Arn': ("Profile(Role)", 8),
       }),
       boto3.resource('ec2').instances.all()
   )
@@ -256,28 +264,37 @@ def list_dnss():
 
   for zone in hosted_zones:
     response = client.list_resource_record_sets(HostedZoneId=zone['Id'])
-    dprint(response)
-    for recordSet in response['ResourceRecordSets']:
-      print(recordSet, '--------')
-      if recordSet['Type'] == 'A':
-        dnss.append({
-            'Name': recordSet['Name'],
-            'Type': recordSet['Type'],
-            'Target': recordSet.get("AliasTarget", {}).get('DNSName', 'N/A'),
-            'HostedZoneId': zone['Id'],
-            'HostedZoneName': zone['Name'],
-            'Private': zone.get('Config', {}).get('PrivateZone', False),
-        })
-      elif recordSet['Type'] == 'CNAME':
-        dnss.append({
-            'Name': recordSet['Name'],
-            'Type': recordSet['Type'],
-            'Target': ','.join([x.get('Value') for x in recordSet.get('ResourceRecords', [])]),
-            'TTL': recordSet['TTL'],
-            'HostedZoneId': zone['Id'],
-            'HostedZoneName': zone['Name'],
-            'Private': zone.get('Config', {}).get('PrivateZone', False),
-        })
+    next_token = None
+    while True:
+      if next_token:
+        response = client.list_resource_record_sets(HostedZoneId=zone['Id'], StartRecordName=next_token)
+      else:
+        response = client.list_resource_record_sets(HostedZoneId=zone['Id'])
+      dprint(response)
+      for recordSet in response['ResourceRecordSets']:
+        if recordSet['Type'] == 'A':
+          dnss.append({
+              'Name': recordSet['Name'],
+              'Type': recordSet['Type'],
+              'Target': recordSet.get("AliasTarget", {}).get('DNSName', 'N/A'),
+              'HostedZoneId': zone['Id'],
+              'HostedZoneName': zone['Name'],
+              'Private': zone.get('Config', {}).get('PrivateZone', False),
+          })
+        elif recordSet['Type'] == 'CNAME':
+          dnss.append({
+              'Name': recordSet['Name'],
+              'Type': recordSet['Type'],
+              'Target': ','.join([x.get('Value') for x in recordSet.get('ResourceRecords', [])]),
+              'TTL': recordSet['TTL'],
+              'HostedZoneId': zone['Id'],
+              'HostedZoneName': zone['Name'],
+              'Private': zone.get('Config', {}).get('PrivateZone', False),
+          })
+      if 'NextRecordName' not in response:
+        break
+      next_token = response.get('NextRecordName')
+
       # ignore rest
 
   dprint(dnss)
@@ -296,10 +313,11 @@ def dns(ctx):
           'TTL': ("TTL", 8),
           'HostedZoneId': ("HostedZoneId", 5),
           'HostedZoneName': ("HostedZoneName", 5),
-          'Private': ("Private", 5),
+          'Private': ("Private", 8),
       }),
       list_dnss()
   )
+
 
 def list_albs():
   # find all ALBs
@@ -316,7 +334,7 @@ def list_albs():
     if 'NextMarker' not in response:
       break
     next_marker = response['NextMarker']
-  listeners=[]
+  listeners = []
   for alb in albs:
     response = client.describe_listeners(LoadBalancerArn=alb['LoadBalancerArn'])
     for listener in (response['Listeners']):
@@ -375,6 +393,85 @@ def role(ctx):
       list_roles()
   )
 
+
+def list_acms():
+  client = boto3.client('acm')
+  certs = []
+  next_token = None
+
+  while True:
+    if next_token:
+      response = client.list_certificates(NextToken=next_token)
+    else:
+      response = client.list_certificates()
+
+    for cert in response['CertificateSummaryList']:
+      certs.append({
+          'Arn': cert['CertificateArn'],
+          'DomainName': cert['DomainName'],
+          'Status': cert['Status'],
+          'Type': cert['Type'],
+          'InUseBy': cert.get('InUseBy', 'N/A'),
+      })
+
+    next_token = response.get('NextToken')
+    if not next_token:
+      break
+
+  return certs
+
+
+@cli.command()
+@click.pass_context
+def cert(ctx):
+  __process(
+      ctx,
+      OrderedDict({
+          'Arn': ("RoleArn", 9),
+          'DomainName': ("DomainName", 8),
+          'Status': ("Status", 8),
+          'Type': ("Type", 8),
+          'InUseBy': ("InUseBy", 6),
+      }),
+      list_acms()
+  )
+
+
+
+def list_amis():
+  client = boto3.client('ec2')
+  amis = []
+  next_token = None
+  while True:
+    # fetch all images
+    if next_token:
+      response = client.describe_images(Owners=['self'], NextToken=next_token)
+    else:
+      response = client.describe_images(Owners=['self'])
+    dprint(response)
+    amis.extend(response['Images'])
+    if 'NextToken' not in response:
+      break
+    next_token = response['NextToken']
+    
+  return amis
+
+
+@cli.command()
+@click.pass_context
+def ami(ctx):
+  __process(
+      ctx,
+      OrderedDict({
+          'Name': ("Name", 9),
+          'ImageId': ("ImageId", 8),
+          'Description': ("Description", 8),
+          'SourceInstanceId': ("SourceInstanceId", 6),
+          'Architecture': ("Architecture", 6),
+          find_tag: ("SourceAMI", 8),
+      }),
+      list_amis()
+  )
 
 if __name__ == '__main__':
   cli()
