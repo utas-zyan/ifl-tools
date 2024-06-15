@@ -1,4 +1,4 @@
-#!/usr/local/bin/env python3
+#!/usr/bin/env python3
 import click
 import pprint, boto3, os, sys
 from collections import OrderedDict
@@ -69,7 +69,7 @@ def compare_secrets(profiles, width):
   dprint(keys)
   data = [
     {
-      profile: all_details[profile].get(key, {}).get('Name', 'N/A')[-width:]
+      profile: all_details[profile].get(key, {}).get('Name', '')[-width:]
       for profile in profiles  
     }
   for key in sorted(list(set(all_keys)))]
