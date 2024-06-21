@@ -1,16 +1,47 @@
 #!/bin/bash
+LINUX_USER=ec2-user
+
 if [ -z "$1" ]; then
-  echo "Usage: $0 instance-id/name"
+  echo "Usage: $0 instance-id/name [command]"
+  echo "command: ssh - inject ssh key ( ~/.ssh/.id_ed25519 or ~/.ssh/id_rsa) to the instance, and then ssh to it"
+  echo "command: kill - kill this instance instead"
   exit 1
 fi
 
 if [[ $1 =~ i- ]]; then # looks like i-xxxxx
-  aws ssm start-session --target $1
+  instance_id=$1
 else # find the instance id by the name in the first place
   instance_id=$(aws ec2 describe-instances --filters "Name=tag:Name,Values=$1" --query "Reservations[].Instances[].InstanceId" --output text|awk '{print $1}')
   if [[ -z "$instance_id" ]]; then
     echo "Not finding instance id by name $1"
     exit 1
   fi
+fi
+if [[ ! -z "$2" ]]; then
+  if [[ "$2" == "kill" ]]; then
+    echo "Terminating instance $instance_id"
+    aws ec2 terminate-instances --instance-ids $instance_id
+    exit 0
+  elif [[ "$2" == "ssh" ]]; then
+    echo "Injecting ssh key to instance $instance_id"
+    if [[ -f ~/.ssh/id_ed25519.pub ]]; then
+      SSH_KEY=$(cat ~/.ssh/id_ed25519.pub| base64 -w 0)
+    elif [[ -f ~/.ssh/id_rsa.pub ]]; then
+      SSH_KEY=$(cat ~/.ssh/id_rsa.pub| base64 -w 0)
+    else
+      echo "No ssh key found in ~/.ssh/id_ed25519.pub or ~/.ssh/id_rsa.put"
+      exit 1
+    fi
+    SCRIPT="echo $SSH_KEY | base64 -d > /tmp/x; sudo cat /tmp/x >> /home/$LINUX_USER/.ssh/authorized_keys; sudo rm /tmp/x"
+    SCRIPT=$(echo $SCRIPT | base64 -w 0)
+    aws ssm send-command --document-name "AWS-RunShellScript" --parameters commands="echo $SCRIPT | base64 -d > /tmp/script, sh /tmp/script " --targets "Key=InstanceIds,Values=$instance_id" --output text
+    ssh $LINUX_USER@$instance_id
+    exit 0
+  else
+    echo "Unknonw command $2"
+    exit 1
+  fi
+else 
   aws ssm start-session --target $instance_id
 fi
+
