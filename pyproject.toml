@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ifl-tools"
+version = "0.1.0"
+description = "Quick python tools for IFL"
+authors = [{name = "Cheney Yan", email = "cheney.yan@gmail.com"}]
+license = {text = "MIT License"}
+dependencies = [
+    "boto3",
+    "click",
+    "requests",
+    "pyyaml",
+    "prettytable",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+homepage = "https://github.com/cheney-yan-ifl/ifl-tools"
+repository = "https://github.com/cheney-yan-ifl/my_package"
+documentation = "https://github.com/cheney-yan-ifl/my_package"
+
+
+
+
+[project.scripts]
+all = "all:cli"
+cred_tool = "cred_tool:cli"
+diff_secrets = "diff_secrets:compare_secrets"
+
+[tool.setuptools]
+script-files = ["scripts/ssm", "scripts/get_eks_config"]
