@@ -22,9 +22,9 @@ classifiers = [
 ]
 
 [project.urls]
-homepage = "https://github.com/cheney-yan-ifl/ifl-tools"
-repository = "https://github.com/cheney-yan-ifl/my_package"
-documentation = "https://github.com/cheney-yan-ifl/my_package"
+homepage = "https://github.com/utas-zyan/ifl-tools"
+repository = "https://github.com/utas-zyan/ifl-toolse"
+documentation = "https://github.com/utas-zyan/ifl-tools"
 
 
 
