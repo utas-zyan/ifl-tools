@@ -115,6 +115,7 @@ allow_all_policy = {
 def aws_signin_url(base_profile=None, credentials={}, assumed_role=None, time_to_live=None, session_name="Assume", ):
   session = boto3.Session(profile_name=base_profile)
   sts_client = session.client('sts')
+  print(credentials)
   if not credentials:
     if not assumed_role:  # using the profile directly
       if not time_to_live:
@@ -135,6 +136,9 @@ def aws_signin_url(base_profile=None, credentials={}, assumed_role=None, time_to
           RoleArn=assumed_role,
           RoleSessionName=session_name
       ).get('Credentials')
+  else:
+    if 'Credentials' in credentials:
+      credentials = credentials.get('Credentials')
   # Format credentials into JSON
   json_string_with_temp_credentials = '{'
   json_string_with_temp_credentials += '"sessionId":"' + \
@@ -216,11 +220,13 @@ def login(ctx, profile, role_arn):
               'SecretAccessKey': session.get_credentials().secret_key,
               'SessionToken': session.get_credentials().token
           }
+          url = aws_signin_url(credentials=credentials)
+          print(url)
+          exit(0)
         else:
-          credentials = session.client('sts').get_session_token()
-        url = aws_signin_url(credentials=credentials)
-        print(url)
-        exit(0)
+          identity = session.client('sts').get_caller_identity()
+          print(f"https://{identity['Account']}.signin.aws.amazon.com/console  USER: {identity['Arn'].split('/')[-1]}")
+          exit(0)
 
 
 @cli.command()
