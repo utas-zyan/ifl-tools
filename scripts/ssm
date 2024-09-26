@@ -6,13 +6,14 @@ if [ -z "$1" ]; then
   echo "command: ssh - inject ssh key ( ~/.ssh/.id_ed25519 or ~/.ssh/id_rsa) to the instance, and then ssh to it"
   echo "command: kill - kill this instance instead"
   echo "command: tcpf - enable tcp forward for ssh server"
+  echo "command: run - Run command on the remote instance"
   exit 1
 fi
 
 if [[ $1 =~ i- ]]; then # looks like i-xxxxx
   instance_id=$1
 else # find the instance id by the name in the first place
-  instance_id=$(aws ec2 describe-instances --filters "Name=tag:Name,Values=$1" --query "Reservations[].Instances[].InstanceId" --output text|awk '{print $1}')
+  instance_id=$(aws ec2 describe-instances --filters "Name=tag:Name,Values=$1" "Name=instance-state-name,Values=running" --query "Reservations[].Instances[].InstanceId" --output text|awk '{print $1}')
   if [[ -z "$instance_id" ]]; then
     echo "Not finding instance id by name $1"
     exit 1
@@ -43,6 +44,21 @@ if [[ ! -z "$2" ]]; then
     ssh $instance_id sudo sed -i 's/.*AllowTcpForwarding\ .*/AllowTcpForwarding\ yes/' /etc/ssh/sshd_config
     ssh $instance_id sudo systemctl restart sshd
     exit 0
+  elif [[ "$2" == "run" ]]; then
+    shift; shift;
+    echo Running command "'$@'" on the remote instance
+    command_id=$(aws ssm send-command \
+      --instance-ids "$instance_id" \
+      --document-name "AWS-RunShellScript" \
+      --comment "Run command" \
+      --parameters commands="$@" \
+      --output text \
+      --query "Command.CommandId")
+    if [[ "$command_id" != "" ]] ; then
+      echo awaiting $command_id to finish...
+      aws ssm wait command-executed --instance-id "$instance_id" --command-id "$command_id"
+      aws ssm get-command-invocation --instance-id "$instance_id" --command-id "$command_id" | jq -r .StandardOutputContent
+	  fi
   else
     echo "Unknonw command $2"
     exit 1
