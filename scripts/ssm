@@ -5,6 +5,7 @@ if [ -z "$1" ]; then
   echo "Usage: $0 instance-id/name [command]"
   echo "command: ssh - inject ssh key ( ~/.ssh/.id_ed25519 or ~/.ssh/id_rsa) to the instance, and then ssh to it"
   echo "command: kill - kill this instance instead"
+  echo "command: tcpf - enable tcp forward for ssh server"
   exit 1
 fi
 
@@ -36,6 +37,11 @@ if [[ ! -z "$2" ]]; then
     SCRIPT=$(echo $SCRIPT | base64 -w 0)
     aws ssm send-command --document-name "AWS-RunShellScript" --parameters commands="echo $SCRIPT | base64 -d > /tmp/script, sh /tmp/script " --targets "Key=InstanceIds,Values=$instance_id" --output text
     ssh $LINUX_USER@$instance_id
+    exit 0
+  elif [[ "$2" == "tcpf" ]]; then
+    echo "Modifying sshd config "
+    ssh $instance_id sudo sed -i 's/.*AllowTcpForwarding\ .*/AllowTcpForwarding\ yes/' /etc/ssh/sshd_config
+    ssh $instance_id sudo systemctl restart sshd
     exit 0
   else
     echo "Unknonw command $2"
