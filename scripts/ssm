@@ -4,7 +4,7 @@ LINUX_USER=ec2-user
 if [ -z "$1" ]; then
   echo "Usage: $0 instance-id/name [command]"
   echo "command: ssh - inject ssh key ( ~/.ssh/.id_ed25519 or ~/.ssh/id_rsa) to the instance, and then ssh to it"
-  echo "command: kill - kill this instance instead"
+  echo "command: kill/stop/start - kill/stop/start this instance instead"
   echo "command: tcpf - enable tcp forward for ssh server"
   echo "command: run - Run command on the remote instance"
   exit 1
@@ -12,17 +12,27 @@ fi
 
 if [[ $1 =~ i- ]]; then # looks like i-xxxxx
   instance_id=$1
-else # find the instance id by the name in the first place
+elif [[ "$2" == "start" ]]; then # find the instance id by the name in the first place
+  instance_id=$(aws ec2 describe-instances --filters "Name=tag:Name,Values=$1" "Name=instance-state-name,Values=stopped" --query "Reservations[].Instances[].InstanceId" --output text|awk '{print $1}')
+else
   instance_id=$(aws ec2 describe-instances --filters "Name=tag:Name,Values=$1" "Name=instance-state-name,Values=running" --query "Reservations[].Instances[].InstanceId" --output text|awk '{print $1}')
-  if [[ -z "$instance_id" ]]; then
+fi
+if [[ -z "$instance_id" ]]; then
     echo "Not finding instance id by name $1"
     exit 1
   fi
-fi
 if [[ ! -z "$2" ]]; then
   if [[ "$2" == "kill" ]]; then
     echo "Terminating instance $instance_id"
     aws ec2 terminate-instances --instance-ids $instance_id
+    exit 0
+  elif [[ "$2" == "stop" ]]; then
+    echo "Stopping instance $instance_id"
+    aws ec2 stop-instances --instance-ids $instance_id
+    exit 0
+  elif [[ "$2" == "start" ]]; then
+    echo "Starting $instance_id"
+    aws ec2 start-instances --instance-ids $instance_id
     exit 0
   elif [[ "$2" == "ssh" ]]; then
     echo "Injecting ssh key to instance $instance_id"
