@@ -514,5 +514,42 @@ def param(ctx):
       }),
       list_params(with_value=ctx.obj['WEIGHT']<=2)
   )
+
+def list_subnets():
+    client = boto3.client('ec2')
+    subnets = []
+    next_token = None
+    
+    while True:
+        if next_token:
+            response = client.describe_subnets(NextToken=next_token)
+        else:
+            response = client.describe_subnets()
+        dprint(response)
+        subnets.extend(response['Subnets'])
+        if 'NextToken' not in response:
+            break
+        next_token = response['NextToken']
+    
+    return subnets
+
+@cli.command()
+@click.pass_context
+def subnet(ctx):
+    __process(
+        ctx,
+        OrderedDict({
+            'SubnetId': ("ID", 9),
+            find_tag: ("Name", 9),
+            'CidrBlock': ("CIDR", 9),
+            'VpcId': ("VPC", 9),
+            'AvailabilityZone': ("AZ", 8),
+            'State': ("State", 7),
+            'AvailableIpAddressCount': ("Available IPs", 6),
+            'MapPublicIpOnLaunch': ("Auto-assign Public IP", 5),
+        }),
+        list_subnets()
+    )
+
 if __name__ == '__main__':
   cli()
