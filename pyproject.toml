@@ -14,7 +14,7 @@ dependencies = [
     "requests",
     "pyyaml",
     "prettytable",
-    "rabulate"
+    "tabulate"
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
