@@ -1,3 +1,4 @@
+import sys
 import boto3
 import shutil
 from tabulate import tabulate
@@ -118,11 +119,23 @@ def get_ec2_info(profile: Optional[str] = None, region: Optional[str] = None, mi
       subnet_id = instance.get('SubnetId', 'N/A')
       if subnet_id == 'N/A':
         continue
+
+      # Get instance name from tags
+      instance_name = 'unnamed'
+      instance_id = instance.get('InstanceId', 'N/A')
+      for tag in instance.get('Tags', []):
+        if tag['Key'] == 'Name':
+          instance_name = tag['Value']
+          break
+
+      # Format as "name (id)"
+      instance_identifier = f"{instance_name} ({instance_id})"
+
       subnet_name = get_subnet_name(subnet_id, profile)
       security_groups = get_security_group_info([sg['GroupId'] for sg in instance.get('SecurityGroups', [])], profile)
       ec2_data.append({
           'Type': 'EC2',
-          'Name': instance.get('InstanceId', 'N/A'),
+          'Name': instance_identifier,
           'SecurityGroups': security_groups,
           'Subnets': subnet_name
       })
@@ -218,7 +231,10 @@ def main(profile: str = None, region: str = None, minimal: bool = False):
   all_data = ec2_data + rds_data + elb_data + elbv2_data + redis_data
 
   # Get terminal width
-  terminal_width = shutil.get_terminal_size().columns
+  if sys.stdout.isatty() :
+    terminal_width = shutil.get_terminal_size().columns
+  else:
+    terminal_width = 240
 
   # Calculate max widths based on actual content
   type_width = max(len(str(item['Type'])) for item in all_data)
@@ -233,7 +249,7 @@ def main(profile: str = None, region: str = None, minimal: bool = False):
   # Security groups get the remaining space (minus margins and separators)
   margins_and_separators = 10  # Space for cell borders and padding
   sg_width = terminal_width - type_width - name_width - subnet_width - margins_and_separators
-  last_line_lenth = 0
+
   # Format security groups info for better readability
   for item in all_data:
     if 'SecurityGroups' in item:
