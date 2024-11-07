@@ -1,6 +1,7 @@
 import sys
 import boto3
 import shutil
+import json
 from tabulate import tabulate
 from textwrap import fill, wrap
 from datetime import datetime, timedelta
@@ -149,13 +150,24 @@ def get_rds_info(profile: Optional[str] = None, region: Optional[str] = None, mi
   instances = rds_client.describe_db_instances()
   rds_data = []
   for db_instance in instances['DBInstances']:
-    subnet_name = db_instance.get('DBSubnetGroup', {}).get('DBSubnetGroupName', 'N/A')
+    # Get subnet names from the DB subnet group
+    subnet_names = []
+    if 'DBSubnetGroup' in db_instance:
+      subnet_group = db_instance['DBSubnetGroup']
+      # Get all subnets in the DB subnet group
+      for subnet in subnet_group.get('Subnets', []):
+        subnet_id = subnet.get('SubnetIdentifier')
+        print(subnet_id)
+        if subnet_id:
+          subnet_name = get_subnet_name(subnet_id, profile)
+          subnet_names.append(subnet_name)
+
     security_groups = get_security_group_info([sg['VpcSecurityGroupId'] for sg in db_instance.get('VpcSecurityGroups', [])], profile)
     rds_data.append({
         'Type': 'RDS',
         'Name': db_instance.get('DBInstanceIdentifier', 'N/A'),
         'SecurityGroups': security_groups,
-        'Subnets': subnet_name
+        'Subnets': ', '.join(subnet_names) if subnet_names else 'N/A'
     })
     if minimal:
       return rds_data  # Return after first instance in minimal mode
@@ -167,13 +179,19 @@ def get_elb_info(profile: Optional[str] = None, region: Optional[str] = None, mi
   load_balancers = elb_client.describe_load_balancers()
   elb_data = []
   for lb in load_balancers['LoadBalancerDescriptions']:
-    subnet_names = [get_subnet_name(subnet_id, profile) for subnet_id in lb.get('Subnets', [])]
+    # Get subnet names for all configured subnets
+    subnet_names = []
+    for az in lb.get('AvailabilityZones', []):
+      subnet_id = az['SubnetId']
+      subnet_name = get_subnet_name(subnet_id, profile)
+      subnet_names.append(subnet_name)
+
     security_groups = get_security_group_info(lb.get('SecurityGroups', []), profile)
     elb_data.append({
         'Type': 'ELB',
         'Name': lb.get('LoadBalancerName', 'N/A'),
         'SecurityGroups': security_groups,
-        'Subnets': ', '.join(subnet_names)
+        'Subnets': ', '.join(subnet_names) if subnet_names else 'N/A'
     })
     if minimal:
       return elb_data  # Return after first load balancer in minimal mode
@@ -185,13 +203,19 @@ def get_elbv2_info(profile: Optional[str] = None, region: Optional[str] = None, 
   load_balancers = elbv2_client.describe_load_balancers()
   elbv2_data = []
   for lb in load_balancers['LoadBalancers']:
-    subnet_names = [get_subnet_name(subnet_id, profile) for subnet_id in lb.get('Subnets', [])]
+    # Get subnet names for all configured subnets
+    subnet_names = []
+    for az in lb.get('AvailabilityZones', []):
+      subnet_id = az['SubnetId']
+      subnet_name = get_subnet_name(subnet_id, profile)
+      subnet_names.append(subnet_name)
+
     security_groups = get_security_group_info(lb.get('SecurityGroups', []), profile)
     elbv2_data.append({
-        'Type': 'ELBv2',
+        'Type': f"ELBv2 ({lb.get('Type', 'unknown')})",  # Show ALB/NLB/GWLB type
         'Name': lb.get('LoadBalancerName', 'N/A'),
         'SecurityGroups': security_groups,
-        'Subnets': ', '.join(subnet_names)
+        'Subnets': ', '.join(subnet_names) if subnet_names else 'N/A'
     })
     if minimal:
       return elbv2_data  # Return after first load balancer in minimal mode
@@ -203,13 +227,31 @@ def get_redis_info(profile: Optional[str] = None, region: Optional[str] = None, 
   clusters = elasticache_client.describe_cache_clusters(ShowCacheNodeInfo=True)
   redis_data = []
   for cluster in clusters['CacheClusters']:
-    subnet_name = cluster.get('CacheSubnetGroupName', 'N/A')
-    security_groups = get_security_group_info([sg['SecurityGroupId'] for sg in cluster.get('SecurityGroups', [])], profile)
+    # Get subnet names from the cache subnet group
+    subnet_names = []
+    if 'CacheSubnetGroupName' in cluster:
+      # Get the subnet group details
+      subnet_group = elasticache_client.describe_cache_subnet_groups(
+          CacheSubnetGroupName=cluster['CacheSubnetGroupName']
+      )['CacheSubnetGroups'][0]
+      
+      # Get all subnets in the cache subnet group
+      for subnet in subnet_group.get('Subnets', []):
+        subnet_id = subnet.get('SubnetIdentifier')
+        if subnet_id:
+          subnet_name = get_subnet_name(subnet_id, profile)
+          subnet_names.append(subnet_name)
+
+    security_groups = get_security_group_info(
+        [sg['SecurityGroupId'] for sg in cluster.get('SecurityGroups', [])],
+        profile
+    )
+    
     redis_data.append({
         'Type': 'Redis',
         'Name': cluster.get('CacheClusterId', 'N/A'),
         'SecurityGroups': security_groups,
-        'Subnets': subnet_name
+        'Subnets': ', '.join(subnet_names) if subnet_names else 'N/A'
     })
     if minimal:
       return redis_data  # Return after first cluster in minimal mode
