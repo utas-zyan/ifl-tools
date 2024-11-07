@@ -157,7 +157,6 @@ def get_rds_info(profile: Optional[str] = None, region: Optional[str] = None, mi
       # Get all subnets in the DB subnet group
       for subnet in subnet_group.get('Subnets', []):
         subnet_id = subnet.get('SubnetIdentifier')
-        print(subnet_id)
         if subnet_id:
           subnet_name = get_subnet_name(subnet_id, profile)
           subnet_names.append(subnet_name)
@@ -282,6 +281,8 @@ def main(profile: str = None, region: str = None, minimal: bool = False):
   type_width = max(len(str(item['Type'])) for item in all_data)
   name_width = max(len(str(item['Name'])) for item in all_data)
   subnet_width = max(len(str(item['Subnets'])) for item in all_data)
+  if subnet_width > 29:
+    subnet_width = 29
 
   # Add some padding
   type_width += 2
