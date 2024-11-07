@@ -4,17 +4,22 @@ from tabulate import tabulate
 from textwrap import fill, wrap
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
-
+import click
 # Cache dictionaries with TTL
 subnet_cache: Dict[str, Tuple[str, datetime]] = {}
 security_group_cache: Dict[str, Tuple[List[str], datetime]] = {}
 CACHE_TTL = timedelta(minutes=20)  # Cache results for 5 minutes
 
-# Add at the top of the file with other globals
-DEBUG_MODE = False  # Global debug toggle
+
+def get_boto3_client(service: str, profile: Optional[str] = None) -> boto3.client:
+  """Create a boto3 client with optional profile"""
+  if profile:
+    session = boto3.Session(profile_name=profile)
+    return session.client(service)
+  return boto3.client(service)
 
 
-def get_subnet_name(subnet_id: str) -> str:
+def get_subnet_name(subnet_id: str, profile: Optional[str] = None) -> str:
   if subnet_id == 'N/A':
     return 'N/A'
 
@@ -26,7 +31,7 @@ def get_subnet_name(subnet_id: str) -> str:
       return cached_value
 
   # Cache miss - fetch from AWS
-  ec2_client = boto3.client('ec2')
+  ec2_client = get_boto3_client('ec2', profile)
   subnets = ec2_client.describe_subnets(SubnetIds=[subnet_id])
   # Look for the Name tag, fallback to subnet ID if not found
   for tag in subnets['Subnets'][0].get('Tags', []):
@@ -41,7 +46,7 @@ def get_subnet_name(subnet_id: str) -> str:
   return result
 
 
-def get_security_group_info(security_group_ids: List[str]) -> str:
+def get_security_group_info(security_group_ids: List[str], profile: Optional[str] = None) -> str:
   # Check cache first
   now = datetime.now()
   cache_hit = True
@@ -63,7 +68,7 @@ def get_security_group_info(security_group_ids: List[str]) -> str:
     return '; '.join(cached_results)
 
   # Cache miss - fetch from AWS
-  ec2_client = boto3.client('ec2')
+  ec2_client = get_boto3_client('ec2', profile)
   security_groups = ec2_client.describe_security_groups(GroupIds=security_group_ids)
 
   sg_info = []
@@ -104,8 +109,8 @@ def get_security_group_info(security_group_ids: List[str]) -> str:
   return ';'.join(sg_info)
 
 
-def get_ec2_info():
-  ec2_client = boto3.client('ec2')
+def get_ec2_info(profile: Optional[str] = None, region: Optional[str] = None, minimal: bool = False):
+  ec2_client = get_boto3_client('ec2', profile)
   instances = ec2_client.describe_instances()
   ec2_data = []
   for reservation in instances['Reservations']:
@@ -113,99 +118,102 @@ def get_ec2_info():
       subnet_id = instance.get('SubnetId', 'N/A')
       if subnet_id == 'N/A':
         continue
-      subnet_name = get_subnet_name(subnet_id)
-      security_groups = get_security_group_info([sg['GroupId'] for sg in instance.get('SecurityGroups', [])])
+      subnet_name = get_subnet_name(subnet_id, profile)
+      security_groups = get_security_group_info([sg['GroupId'] for sg in instance.get('SecurityGroups', [])], profile)
       ec2_data.append({
           'Type': 'EC2',
           'Name': instance.get('InstanceId', 'N/A'),
           'SecurityGroups': security_groups,
           'Subnets': subnet_name
       })
-      if DEBUG_MODE:
-        return ec2_data  # Return after first instance in debug mode
+      if minimal:
+        return ec2_data  # Return after first instance in minimal mode
   return ec2_data
 
 
-def get_rds_info():
-  rds_client = boto3.client('rds')
+def get_rds_info(profile: Optional[str] = None, region: Optional[str] = None, minimal: bool = False):
+  rds_client = get_boto3_client('rds', profile)
   instances = rds_client.describe_db_instances()
   rds_data = []
   for db_instance in instances['DBInstances']:
     subnet_name = db_instance.get('DBSubnetGroup', {}).get('DBSubnetGroupName', 'N/A')
-    security_groups = get_security_group_info([sg['VpcSecurityGroupId'] for sg in db_instance.get('VpcSecurityGroups', [])])
+    security_groups = get_security_group_info([sg['VpcSecurityGroupId'] for sg in db_instance.get('VpcSecurityGroups', [])], profile)
     rds_data.append({
         'Type': 'RDS',
         'Name': db_instance.get('DBInstanceIdentifier', 'N/A'),
         'SecurityGroups': security_groups,
         'Subnets': subnet_name
     })
-    if DEBUG_MODE:
-      return rds_data  # Return after first instance in debug mode
+    if minimal:
+      return rds_data  # Return after first instance in minimal mode
   return rds_data
 
 
-def get_elb_info():
-  elb_client = boto3.client('elb')
+def get_elb_info(profile: Optional[str] = None, region: Optional[str] = None, minimal: bool = False):
+  elb_client = get_boto3_client('elb', profile)
   load_balancers = elb_client.describe_load_balancers()
   elb_data = []
   for lb in load_balancers['LoadBalancerDescriptions']:
-    subnet_names = [get_subnet_name(subnet_id) for subnet_id in lb.get('Subnets', [])]
-    security_groups = get_security_group_info(lb.get('SecurityGroups', []))
+    subnet_names = [get_subnet_name(subnet_id, profile) for subnet_id in lb.get('Subnets', [])]
+    security_groups = get_security_group_info(lb.get('SecurityGroups', []), profile)
     elb_data.append({
         'Type': 'ELB',
         'Name': lb.get('LoadBalancerName', 'N/A'),
         'SecurityGroups': security_groups,
         'Subnets': ', '.join(subnet_names)
     })
-    if DEBUG_MODE:
-      return elb_data  # Return after first load balancer in debug mode
+    if minimal:
+      return elb_data  # Return after first load balancer in minimal mode
   return elb_data
 
 
-def get_elbv2_info():
-  elbv2_client = boto3.client('elbv2')
+def get_elbv2_info(profile: Optional[str] = None, region: Optional[str] = None, minimal: bool = False):
+  elbv2_client = get_boto3_client('elbv2', profile)
   load_balancers = elbv2_client.describe_load_balancers()
   elbv2_data = []
   for lb in load_balancers['LoadBalancers']:
-    subnet_names = [get_subnet_name(subnet_id) for subnet_id in lb.get('Subnets', [])]
-    security_groups = get_security_group_info(lb.get('SecurityGroups', []))
+    subnet_names = [get_subnet_name(subnet_id, profile) for subnet_id in lb.get('Subnets', [])]
+    security_groups = get_security_group_info(lb.get('SecurityGroups', []), profile)
     elbv2_data.append({
         'Type': 'ELBv2',
         'Name': lb.get('LoadBalancerName', 'N/A'),
         'SecurityGroups': security_groups,
         'Subnets': ', '.join(subnet_names)
     })
-    if DEBUG_MODE:
-      return elbv2_data  # Return after first load balancer in debug mode
+    if minimal:
+      return elbv2_data  # Return after first load balancer in minimal mode
   return elbv2_data
 
 
-def get_redis_info():
-  elasticache_client = boto3.client('elasticache')
+def get_redis_info(profile: Optional[str] = None, region: Optional[str] = None, minimal: bool = False):
+  elasticache_client = get_boto3_client('elasticache', profile)
   clusters = elasticache_client.describe_cache_clusters(ShowCacheNodeInfo=True)
   redis_data = []
   for cluster in clusters['CacheClusters']:
     subnet_name = cluster.get('CacheSubnetGroupName', 'N/A')
-    security_groups = get_security_group_info([sg['SecurityGroupId'] for sg in cluster.get('SecurityGroups', [])])
+    security_groups = get_security_group_info([sg['SecurityGroupId'] for sg in cluster.get('SecurityGroups', [])], profile)
     redis_data.append({
         'Type': 'Redis',
         'Name': cluster.get('CacheClusterId', 'N/A'),
         'SecurityGroups': security_groups,
         'Subnets': subnet_name
     })
-    if DEBUG_MODE:
-      return redis_data  # Return after first cluster in debug mode
+    if minimal:
+      return redis_data  # Return after first cluster in minimal mode
   return redis_data
 
 
-def main(debug: bool = False):
-  global DEBUG_MODE
-  DEBUG_MODE = debug
-  ec2_data = get_ec2_info()
-  rds_data = get_rds_info()
-  elb_data = get_elb_info()
-  elbv2_data = get_elbv2_info()
-  redis_data = get_redis_info()
+@click.command(help='List network resources and show their seucurity groups.')
+@click.option('--profile', '-P', help='Which profile to use. If not specified, then use current one', default=None)
+@click.option('--region', '-R', help='Which region to use. If not specified, then use current one', default=None)
+@click.option('--minimal', "-M", type=bool, help='Minimal (only run with print one resource with one resource type)', default=False)
+def main(profile: str = None, region: str = None, minimal: bool = False):
+  # Pass minimal parameter to each info gathering function
+  ec2_data = get_ec2_info(profile, region, minimal)
+  rds_data = get_rds_info(profile, region, minimal)
+  elb_data = get_elb_info(profile, region, minimal)
+  elbv2_data = get_elbv2_info(profile, region, minimal)
+  redis_data = get_redis_info(profile, region, minimal)
 
   all_data = ec2_data + rds_data + elb_data + elbv2_data + redis_data
 
@@ -277,4 +285,4 @@ def main(debug: bool = False):
 
 
 if __name__ == "__main__":
-  main(debug=True)
+  main()
