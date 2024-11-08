@@ -5,7 +5,7 @@ import json
 from tabulate import tabulate
 from textwrap import fill, wrap
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 import click
 # Cache dictionaries with TTL
 subnet_cache: Dict[str, Tuple[str, datetime]] = {}
@@ -49,66 +49,82 @@ def get_subnet_name(subnet_id: str, profile: Optional[str] = None) -> str:
 
 
 def get_security_group_info(security_group_ids: List[str], profile: Optional[str] = None) -> str:
-  # Check cache first
-  now = datetime.now()
-  cache_hit = True
-  cached_results = []
+    # Check cache first
+    now = datetime.now()
+    cache_hit = True
+    cached_results = []
 
-  for sg_id in security_group_ids:
-    if sg_id in security_group_cache:
-      cached_value, cache_time = security_group_cache[sg_id]
-      if now - cache_time < CACHE_TTL:
-        cached_results.extend(cached_value)
-      else:
-        cache_hit = False
-        break
-    else:
-      cache_hit = False
-      break
+    for sg_id in security_group_ids:
+        if sg_id in security_group_cache:
+            cached_value, cache_time = security_group_cache[sg_id]
+            if now - cache_time < CACHE_TTL:
+                cached_results.extend(cached_value)
+            else:
+                cache_hit = False
+                break
+        else:
+            cache_hit = False
+            break
 
-  if cache_hit:
-    return '; '.join(cached_results)
+    if cache_hit:
+        return '; '.join(cached_results)
 
-  # Cache miss - fetch from AWS
-  ec2_client = get_boto3_client('ec2', profile)
-  security_groups = ec2_client.describe_security_groups(GroupIds=security_group_ids)
+    # Cache miss - fetch from AWS
+    ec2_client = get_boto3_client('ec2', profile)
+    security_groups = ec2_client.describe_security_groups(GroupIds=security_group_ids)
 
-  sg_info = []
-  for sg in security_groups['SecurityGroups']:
-    # Format ingress rules
-    ingress_rules = []
-    for rule in sg.get('IpPermissions', []):
-      for ip_range in rule.get('IpRanges', []):
-        ingress_rules.append(
-            f"({rule['IpProtocol']}:{rule.get('FromPort', 'N/A')}-{rule.get('ToPort', 'N/A')},{ip_range['CidrIp']})"
+    sg_info = []
+    for sg in security_groups['SecurityGroups']:
+        # Format ingress rules
+        ingress_rules = []
+        for rule in sg.get('IpPermissions', []):
+            sources = []
+            for ip_range in rule.get('IpRanges', []):
+                sources.append(ip_range['CidrIp'])
+            for user_id_group_pair in rule.get('UserIdGroupPairs', []):
+                sources.append(f"SG:{user_id_group_pair['GroupId']}")
+            for prefix_list in rule.get('PrefixListIds', []):
+                sources.append(f"PL:{prefix_list['PrefixListId']}")
+            if not sources:
+                sources.append("unknown source")
+            ingress_rules.append(
+                f"({rule['IpProtocol']}:{rule.get('FromPort', 'N/A')}-{rule.get('ToPort', 'N/A')},{','.join(sources)})"
+            )
+
+        # Format egress rules
+        egress_rules = []
+        for rule in sg.get('IpPermissionsEgress', []):
+            destinations = []
+            for ip_range in rule.get('IpRanges', []):
+                destinations.append(ip_range['CidrIp'])
+            for user_id_group_pair in rule.get('UserIdGroupPairs', []):
+                destinations.append(f"SG:{user_id_group_pair['GroupId']}")
+            for prefix_list in rule.get('PrefixListIds', []):
+                destinations.append(f"PL:{prefix_list['PrefixListId']}")
+            if not destinations:
+                destinations.append("unknown destination")
+            egress_rules.append(
+                f"({rule['IpProtocol']}:{rule.get('FromPort', 'N/A')}-{rule.get('ToPort', 'N/A')},{','.join(destinations)})"
+            )
+
+        # Handle empty rules case
+        if not ingress_rules:
+            ingress_rules = ["(no inbound rules)"]
+        if not egress_rules:
+            egress_rules = ["(no outbound rules)"]
+
+        # Format with proper spacing and line breaks
+        info = (
+            f"{sg['GroupName']}"
+            f"[Ingress:({','.join(ingress_rules)}), "
+            f"Egress:({','.join(egress_rules)})]"
         )
+        sg_info.append(info)
 
-    # Format egress rules
-    egress_rules = []
-    for rule in sg.get('IpPermissionsEgress', []):
-      for ip_range in rule.get('IpRanges', []):
-        egress_rules.append(
-            f"({rule['IpProtocol']}:{rule.get('FromPort', 'N/A')}-{rule.get('ToPort', 'N/A')},{ip_range['CidrIp']})"
-        )
+        # Update cache for individual security group
+        security_group_cache[sg['GroupId']] = ([info], now)
 
-    # Handle empty rules case
-    if not ingress_rules:
-      ingress_rules = ["(no inbound rules)"]
-    if not egress_rules:
-      egress_rules = ["(no outbound rules)"]
-
-    # Format with proper spacing and line breaks
-    info = (
-        f"{sg['GroupName']}"
-        f"[Ingress:({','.join(ingress_rules)}), "
-        f"Egress:({','.join(egress_rules)})]"
-    )
-    sg_info.append(info)
-
-    # Update cache for individual security group
-    security_group_cache[sg['GroupId']] = ([info], now)
-
-  return ';'.join(sg_info)
+    return ';'.join(sg_info)
 
 
 def get_ec2_info(profile: Optional[str] = None, region: Optional[str] = None, minimal: bool = False):
@@ -257,6 +273,40 @@ def get_redis_info(profile: Optional[str] = None, region: Optional[str] = None, 
   return redis_data
 
 
+def get_lambda_info(profile: Optional[str] = None, region: Optional[str] = None, minimal: bool = False):
+    lambda_client = get_boto3_client('lambda', profile)
+    functions = lambda_client.list_functions()
+    lambda_data = []
+    
+    for func in functions['Functions']:
+        vpc_config = func.get('VpcConfig', {})
+        if not vpc_config:
+            continue  # Skip Lambda functions not in a VPC
+            
+        subnet_ids = vpc_config.get('SubnetIds', [])
+        security_group_ids = vpc_config.get('SecurityGroupIds', [])
+        
+        # Get subnet names
+        subnet_names = []
+        for subnet_id in subnet_ids:
+            subnet_name = get_subnet_name(subnet_id, profile)
+            subnet_names.append(subnet_name)
+            
+        security_groups = get_security_group_info(security_group_ids, profile)
+        
+        lambda_data.append({
+            'Type': 'Lambda',
+            'Name': func.get('FunctionName', 'N/A'),
+            'SecurityGroups': security_groups,
+            'Subnets': ', '.join(subnet_names) if subnet_names else 'N/A'
+        })
+        
+        if minimal:
+            return lambda_data  # Return after first function in minimal mode
+            
+    return lambda_data
+
+
 @click.command(help='List network resources and show their seucurity groups.')
 @click.option('--profile', '-P', help='Which profile to use. If not specified, then use current one', default=None)
 @click.option('--region', '-R', help='Which region to use. If not specified, then use current one', default=None)
@@ -268,8 +318,9 @@ def main(profile: str = None, region: str = None, minimal: bool = False):
   elb_data = get_elb_info(profile, region, minimal)
   elbv2_data = get_elbv2_info(profile, region, minimal)
   redis_data = get_redis_info(profile, region, minimal)
+  lambda_data = get_lambda_info(profile, region, minimal)
 
-  all_data = ec2_data + rds_data + elb_data + elbv2_data + redis_data
+  all_data = ec2_data + rds_data + elb_data + elbv2_data + redis_data + lambda_data
 
   # Get terminal width
   if sys.stdout.isatty() :
