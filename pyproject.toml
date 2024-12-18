@@ -35,7 +35,7 @@ all = "all:cli"
 cred_tool = "cred_tool:cli"
 diff_secrets = "diff_secrets:compare_secrets"
 describe-network-resources = "describe_network_resources:main"
-
+decrypt-auth-error = "decrypt_auth_error:main"
 
 [tool.setuptools]
 script-files = ["scripts/ssm", "scripts/get_eks_config"]
