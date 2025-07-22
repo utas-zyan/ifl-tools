@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ifl-tools"
-version = "0.1.1"
+version = "0.1.2"
 description = "Quick python tools for IFL"
 authors = [{name = "Cheney Yan", email = "cheney.yan@gmail.com"}]
 license = {text = "MIT License"}
