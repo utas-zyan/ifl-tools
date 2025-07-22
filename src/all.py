@@ -106,25 +106,26 @@ def find_tag(resource, tag_key):
 @cli.command()
 @click.pass_context
 def ec2(ctx):
-  __process(
-      ctx,
-      OrderedDict({
-          'id': ("ID", 9),
-          find_tag: ("Name", 8),
-          'public_ip_address': ("IP", 8),
-          'private_ip_address': ("ip", 8),
-          'state.Name': ("STATE", 8),
-          'vpc_id': ("VPC", 3),
-          'subnet_id': ("Subnet", 3),
-          'security_groups': ("SG", 3),
-          'instance_type': ("Type", 3),
-          'launch_time': ("Time", 2),
-          'tags': ("Tags", 6),
-          'key_name': ("Key Name", 7),
-          'iam_instance_profile.Arn': ("Profile(Role)", 8),
-      }),
-      boto3.resource('ec2').instances.all()
-  )
+    """List EC2 instances."""
+    __process(
+        ctx,
+        OrderedDict({
+            'id': ("ID", 9),
+            find_tag: ("Name", 8),
+            'public_ip_address': ("IP", 8),
+            'private_ip_address': ("ip", 8),
+            'state.Name': ("STATE", 8),
+            'vpc_id': ("VPC", 3),
+            'subnet_id': ("Subnet", 3),
+            'security_groups': ("SG", 3),
+            'instance_type': ("Type", 3),
+            'launch_time': ("Time", 2),
+            'tags': ("Tags", 6),
+            'key_name': ("Key Name", 7),
+            'iam_instance_profile.Arn': ("Profile(Role)", 8),
+        }),
+        boto3.resource('ec2').instances.all()
+    )
 
 
 def list_kms_keys():
@@ -173,17 +174,18 @@ def list_kms_keys():
 @cli.command()
 @click.pass_context
 def kms(ctx):
-  __process(
-      ctx,
-      OrderedDict({
-          'KeyId': ("ID", 8),
-          'KeyArn': ("Arn", 1),
-          'Alias': ("Alias", 9),
-          'KeyState': ("State", 7),
-          'Description': ("Description", 8),
-      }),
-      list_kms_keys()
-  )
+    """List KMS keys."""
+    __process(
+        ctx,
+        OrderedDict({
+            'KeyId': ("ID", 8),
+            'KeyArn': ("Arn", 1),
+            'Alias': ("Alias", 9),
+            'KeyState': ("State", 7),
+            'Description': ("Description", 8),
+        }),
+        list_kms_keys()
+    )
 
 
 def list_secrets(with_value=False):
@@ -210,19 +212,19 @@ def list_secrets(with_value=False):
 @cli.command()
 @click.pass_context
 def secret(ctx):
-  __process(
-      ctx,
-      OrderedDict({
-          'Name': ("Name", 8),
-          'ARN': ("Arn", 1),
-          'LastChangedDate': ("LastChangedDate", 7),
-          'LastAccessedDate': ("LastAccessedDate", 8),
-          'Description': ("Description", 8),
-          'SecretValue': ("SecretValue", 2),
-
-      }),
-      list_secrets(with_value=ctx.obj['WEIGHT']<=2)
-  )
+    """List Secrets Manager secrets."""
+    __process(
+        ctx,
+        OrderedDict({
+            'Name': ("Name", 8),
+            'ARN': ("Arn", 1),
+            'LastChangedDate': ("LastChangedDate", 7),
+            'LastAccessedDate': ("LastAccessedDate", 8),
+            'Description': ("Description", 8),
+            'SecretValue': ("SecretValue", 2),
+        }),
+        list_secrets(with_value=ctx.obj['WEIGHT']<=2)
+    )
 
 
 def list_rdss():
@@ -245,20 +247,21 @@ def list_rdss():
 @cli.command()
 @click.pass_context
 def rds(ctx):
-  __process(
-      ctx,
-      OrderedDict({
-          'DBInstanceIdentifier': ("Id", 8),
-          'DBInstanceArn': ("Arn", 1),
-          'ReadReplicaDBInstanceIdentifiers': ("Replica", 8),
-          'Endpoint.Address': ("Endpoint", 8),
-          'Endpoint.Port': ("Port", 8),
-          'StorageEncrypted': ("Encrypted", 7),
-          'KmsKeyId': ("KmdKeyId", 7),
-          'DBParameterGroups': ("ParameterGroups", 6),
-      }),
-      list_rdss()
-  )
+    """List RDS instances."""
+    __process(
+        ctx,
+        OrderedDict({
+            'DBInstanceIdentifier': ("Id", 8),
+            'DBInstanceArn': ("Arn", 1),
+            'ReadReplicaDBInstanceIdentifiers': ("Replica", 8),
+            'Endpoint.Address': ("Endpoint", 8),
+            'Endpoint.Port': ("Port", 8),
+            'StorageEncrypted': ("Encrypted", 7),
+            'KmsKeyId': ("KmdKeyId", 7),
+            'DBParameterGroups': ("ParameterGroups", 6),
+        }),
+        list_rdss()
+    )
 
 
 def list_dnss():
@@ -309,19 +312,20 @@ def list_dnss():
 @cli.command()
 @click.pass_context
 def dns(ctx):
-  __process(
-      ctx,
-      OrderedDict({
-          'Name': ("Name", 8),
-          'Type': ("Type", 8),
-          'Target': ("Target", 8),
-          'TTL': ("TTL", 8),
-          'HostedZoneId': ("HostedZoneId", 5),
-          'HostedZoneName': ("HostedZoneName", 5),
-          'Private': ("Private", 8),
-      }),
-      list_dnss()
-  )
+    """List Route53 DNS records."""
+    __process(
+        ctx,
+        OrderedDict({
+            'Name': ("Name", 8),
+            'Type': ("Type", 8),
+            'Target': ("Target", 8),
+            'TTL': ("TTL", 8),
+            'HostedZoneId': ("HostedZoneId", 5),
+            'HostedZoneName': ("HostedZoneName", 5),
+            'Private': ("Private", 8),
+        }),
+        list_dnss()
+    )
 
 
 def list_albs():
@@ -356,16 +360,17 @@ def list_albs():
 @cli.command()
 @click.pass_context
 def alb(ctx):
-  __process(
-      ctx,
-      OrderedDict({
-          'ListenerArn': ("ListenerArn", 9),
-          'LoadBalancerArn': ("LoadBalancerArn", 9),
-          'DNSName': ("DNSName", 8),
-          'Private': ("Private", 8),
-      }),
-      list_albs()
-  )
+    """List ALB listeners."""
+    __process(
+        ctx,
+        OrderedDict({
+            'ListenerArn': ("ListenerArn", 9),
+            'LoadBalancerArn': ("LoadBalancerArn", 9),
+            'DNSName': ("DNSName", 8),
+            'Private': ("Private", 8),
+        }),
+        list_albs()
+    )
 
 
 def list_roles():
@@ -390,13 +395,14 @@ def list_roles():
 @cli.command()
 @click.pass_context
 def role(ctx):
-  __process(
-      ctx,
-      OrderedDict({
-          'Arn': ("RoleArn", 9),
-      }),
-      list_roles()
-  )
+    """List IAM roles."""
+    __process(
+        ctx,
+        OrderedDict({
+            'Arn': ("RoleArn", 9),
+        }),
+        list_roles()
+    )
 
 
 def list_acms():
@@ -429,17 +435,18 @@ def list_acms():
 @cli.command()
 @click.pass_context
 def cert(ctx):
-  __process(
-      ctx,
-      OrderedDict({
-          'Arn': ("RoleArn", 9),
-          'DomainName': ("DomainName", 8),
-          'Status': ("Status", 8),
-          'Type': ("Type", 8),
-          'InUseBy': ("InUseBy", 6),
-      }),
-      list_acms()
-  )
+    """List ACM certificates."""
+    __process(
+        ctx,
+        OrderedDict({
+            'Arn': ("RoleArn", 9),
+            'DomainName': ("DomainName", 8),
+            'Status': ("Status", 8),
+            'Type': ("Type", 8),
+            'InUseBy': ("InUseBy", 6),
+        }),
+        list_acms()
+    )
 
 
 
@@ -465,18 +472,19 @@ def list_amis():
 @cli.command()
 @click.pass_context
 def ami(ctx):
-  __process(
-      ctx,
-      OrderedDict({
-          'Name': ("Name", 9),
-          'ImageId': ("ImageId", 8),
-          'Description': ("Description", 8),
-          'SourceInstanceId': ("SourceInstanceId", 6),
-          'Architecture': ("Architecture", 6),
-          find_tag: ("SourceAMI", 8),
-      }),
-      list_amis()
-  )
+    """List EC2 AMIs."""
+    __process(
+        ctx,
+        OrderedDict({
+            'Name': ("Name", 9),
+            'ImageId': ("ImageId", 8),
+            'Description': ("Description", 8),
+            'SourceInstanceId': ("SourceInstanceId", 6),
+            'Architecture': ("Architecture", 6),
+            find_tag: ("SourceAMI", 8),
+        }),
+        list_amis()
+    )
 
 
 def list_params(with_value=False):
@@ -504,16 +512,17 @@ def list_params(with_value=False):
 @cli.command()
 @click.pass_context
 def param(ctx):
-  __process(
-      ctx,
-      OrderedDict({
-          'Name': ("Name", 9),
-          'Description': ("Description", 8),
-          'ARN': ("ARN", 6),
-          'Value': ("Value", 2),
-      }),
-      list_params(with_value=ctx.obj['WEIGHT']<=2)
-  )
+    """List SSM parameters."""
+    __process(
+        ctx,
+        OrderedDict({
+            'Name': ("Name", 9),
+            'Description': ("Description", 8),
+            'ARN': ("ARN", 6),
+            'Value': ("Value", 2),
+        }),
+        list_params(with_value=ctx.obj['WEIGHT']<=2)
+    )
 
 def list_subnets():
     client = boto3.client('ec2')
@@ -533,9 +542,72 @@ def list_subnets():
     
     return subnets
 
+# --- ASG Support ---
+def list_asgs():
+    client = boto3.client('autoscaling')
+    asgs = []
+    next_token = None
+    while True:
+        if next_token:
+            response = client.describe_auto_scaling_groups(NextToken=next_token)
+        else:
+            response = client.describe_auto_scaling_groups()
+        dprint(response)
+        asgs.extend(response['AutoScalingGroups'])
+        next_token = response.get('NextToken')
+        if not next_token:
+            break
+    return asgs
+
+@cli.command()
+@click.pass_context
+@click.option('--set-desired', type=int, help='Set desired instance count for ASG')
+@click.option('--asg-name', type=str, help='Target ASG name for setting desired count')
+def asg(ctx, set_desired, asg_name):
+    """List ASGs or set desired instance count."""
+    client = boto3.client('autoscaling')
+    if set_desired is not None and asg_name:
+        # Get ASG details
+        response = client.describe_auto_scaling_groups(AutoScalingGroupNames=[asg_name])
+        if not response['AutoScalingGroups']:
+            print(f"ASG '{asg_name}' not found.")
+            return
+        asg_info = response['AutoScalingGroups'][0]
+        max_size = asg_info['MaxSize']
+        if set_desired > max_size:
+            print(f"Desired ({set_desired}) > MaxSize ({max_size}), updating MaxSize...")
+            client.update_auto_scaling_group(AutoScalingGroupName=asg_name, MaxSize=set_desired)
+        print(f"Setting desired capacity for ASG '{asg_name}' to {set_desired}")
+        client.update_auto_scaling_group(AutoScalingGroupName=asg_name, DesiredCapacity=set_desired)
+        print("Done.")
+        return
+    # Otherwise, just list ASGs
+    def asg_tags(resource, key):
+        tags = resource.get('Tags', [])
+        for tag in tags:
+            if tag['Key'] == key:
+                return tag['Value']
+        return 'N/A'
+    __process(
+        ctx,
+        OrderedDict({
+            'AutoScalingGroupName': ("Name", 9),
+            asg_tags: ("Env", 8),
+            'DesiredCapacity': ("Desired", 8),
+            'MinSize': ("Min", 7),
+            'MaxSize': ("Max", 7),
+            'Instances': ("Instances", 6),
+            'LaunchConfigurationName': ("LaunchConfig", 6),
+            'LaunchTemplate.LaunchTemplateName': ("LaunchTemplate", 6),
+            'VPCZoneIdentifier': ("Subnets", 6),
+        }),
+        list_asgs()
+    )
+
 @cli.command()
 @click.pass_context
 def subnet(ctx):
+    """List EC2 subnets."""
     __process(
         ctx,
         OrderedDict({
