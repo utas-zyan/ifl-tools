@@ -405,6 +405,47 @@ def role(ctx):
     )
 
 
+def list_policies():
+  # find all policies
+  client = boto3.client('iam')
+  policies = []
+  next_marker = None
+  while True:
+    if next_marker:
+      response = client.list_policies(Marker=next_marker, MaxItems=100)
+    else:
+      response = client.list_policies(MaxItems=100)
+    dprint(response)
+    policies.extend(response['Policies'])
+    if 'Marker' not in response:
+      break
+    next_marker = response['Marker']
+
+  return policies
+
+
+@cli.command()
+@click.pass_context
+def policy(ctx):
+    """List IAM policies."""
+    __process(
+        ctx,
+        OrderedDict({
+            'PolicyName': ("Name", 9),
+            'Arn': ("Arn", 8),
+            'PolicyId': ("PolicyId", 5),
+            'Path': ("Path", 7),
+            'CreateDate': ("CreateDate", 6),
+            'UpdateDate': ("UpdateDate", 6),
+            'AttachmentCount': ("Attachments", 8),
+            'PermissionsBoundaryUsageCount': ("PermissionsBoundaryUsage", 5),
+            'IsAttachable': ("Attachable", 7),
+            'Description': ("Description", 6),
+        }),
+        list_policies()
+    )
+
+
 def list_acms():
   client = boto3.client('acm')
   certs = []
